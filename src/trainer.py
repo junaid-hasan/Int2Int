@@ -322,7 +322,9 @@ class Trainer(object):
         self.epoch = data["epoch"] + 1
         self.n_total_iter = data["n_total_iter"]
         self.best_metrics = data["best_metrics"]
-        self.best_stopping_criterion = data["best_stopping_criterion"]
+        if data.get("best_stopping_criterion") is not None:
+            self.best_stopping_criterion = data["best_stopping_criterion"]
+        # self.best_stopping_criterion = data["best_stopping_criterion"]
         logger.warning(
             f"Checkpoint reloaded. Resuming at epoch {self.epoch} / iteration {self.n_total_iter} ..."
         )

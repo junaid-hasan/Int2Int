@@ -97,11 +97,27 @@ class Evaluator(object):
             scores["total"] = self.trainer.total_samples
             return scores
         
-        data_type_list = ["valid"]
-        if params.eval_data != '':
-            l = len(params.eval_data.split(','))
-            for i in range(l):
-                data_type_list.append("test"+(str(i+1) if i>0 else ""))
+        # data_type_list = ["valid"]
+        # if params.eval_data != '':
+        #     l = len(params.eval_data.split(','))
+        #     for i in range(l):
+        #         data_type_list.append("test"+(str(i+1) if i>0 else ""))
+        # In src/evaluator.py -> run_all_evals()
+
+        data_type_list = []
+        if params.eval_data == '':
+            # Default behavior for on-the-fly evaluation
+            data_type_list.append("valid")
+        else:
+            # Create one evaluation task for each file path provided
+            paths = params.eval_data.split(',')
+            if len(paths) >= 1:
+                data_type_list.append("valid")
+            if len(paths) >= 2:
+                data_type_list.append("test")
+            if len(paths) > 2:
+                for i in range(2, len(paths)):
+                    data_type_list.append(f"test{i}")
 
         with torch.no_grad():
             for data_type in data_type_list:

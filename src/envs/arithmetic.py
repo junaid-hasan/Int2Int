@@ -58,10 +58,6 @@ def data_type_to_encoder(params, typ):
         assert False, "type not supported"
 
 
-
-
-
-
 class ArithmeticEnvironment(object):
 
     TRAINING_TASKS = {"arithmetic"}
@@ -73,26 +69,109 @@ class ArithmeticEnvironment(object):
         self.base = params.base
         self.max_class = params.max_class
 
-        #if self.operation == 'data':
-            #assert params.data_types, "argument --data_types is required"
-            #i, o = params.data_types.split(':')
-            #self.input_encoder = data_type_to_encoder(params, i)
-            #self.output_encoder = data_type_to_encoder(params, o)
-        #    self.input_encoder = encoders.NumberArray(params, 5, 'V', 1)
-        #    self.output_encoder = encoders.SymbolicInts(0, 10)
-        #    dims=[]
-        #    self.generator = generators.Sequence(params, dims)
         self.export_pred = params.export_pred
         self.n_eval_metrics = params.n_eval_metrics
         self.n_error_metrics = params.n_error_metrics
 
+        # =================================================================
+        # Start of modifications
+        # =================================================================
+        
+        # We add the new 'boolean_f' operation and refactor the logic
+        # to correctly initialize encoders and generators for each operation.
 
-        if self.operation == 'matrix_rank':
+        if self.operation == 'boolean_f':
+            # This is the new operation F(B,C,D) = (B AND C) OR (!B AND D)
+            # Inputs B, C, D are 32-bit binary numbers. Output F is a 32-bit binary number.
+            # We encode them as 1D arrays of symbolic integers (0 and 1).
+            params.min_int = 0
+            params.max_int = 1
+            dims = [32] # The bit-length of the numbers
+            tensor_dim = 1
+            # Input is B, C, D concatenated, so 3 * 32 = 96 bits
+            self.input_encoder = encoders.NumberArray(params, 96, 'V', tensor_dim, 'symbolic')
+            # Output is F, so 32 bits
+            self.output_encoder = encoders.NumberArray(params, 32, 'V', tensor_dim, 'symbolic')
+            self.generator = generators.Sequence(params, dims)
+        
+        elif self.operation == 'boolean_f_hex':
+            # This is the same function, but inputs/outputs are 32-bit numbers
+            # represented as 8 symbolic hexadecimal characters ('0'-'F').
+            # We set min/max_int for the SymbolicInts constructor, but will overwrite the symbols.
+            params.min_int = 0
+            params.max_int = 15
+            dims = [8] # A 32-bit number has 8 hex digits
+            tensor_dim = 1
+            # Input is B, C, D concatenated, so 3 * 8 = 24 hex digits
+            self.input_encoder = encoders.NumberArray(params, 24, 'V', tensor_dim, 'symbolic')
+            # Output is F, so 8 hex digits
+            self.output_encoder = encoders.NumberArray(params, 8, 'V', tensor_dim, 'symbolic')
+
+            # Manually patch the symbols and the symbol-to-value map
+            hex_chars = [c for c in '0123456789ABCDEF']
+            hex_map = {c: i for i, c in enumerate(hex_chars)}
+
+            # Patch input encoder
+            self.input_encoder.subencoder.symbols = hex_chars
+            self.input_encoder.subencoder.symbol_to_value = hex_map
+            self.input_encoder.symbols = self.input_encoder.dimencoder.symbols + self.input_encoder.subencoder.symbols
+
+            # Patch output encoder
+            self.output_encoder.subencoder.symbols = hex_chars
+            self.output_encoder.subencoder.symbol_to_value = hex_map
+            self.output_encoder.symbols = self.output_encoder.dimencoder.symbols + self.output_encoder.subencoder.symbols
+
+            self.generator = generators.Sequence(params, dims)
+            
+        elif self.operation == 'invert_f_b_binary':
+            # This is the inverted function B = g(F,C,D) using binary representations.
+            params.min_int = 0
+            params.max_int = 1
+            dims = [32] # 32 binary digits
+            tensor_dim = 1
+
+            # Input is F, C, D concatenated, so 3 * 32 = 96 bits.
+            self.input_encoder = encoders.NumberArray(params, 96, 'V', tensor_dim, 'symbolic')
+            # Output is B, so 32 bits.
+            self.output_encoder = encoders.NumberArray(params, 32, 'V', tensor_dim, 'symbolic')
+
+            self.generator = generators.Sequence(params, dims)
+
+        elif self.operation == 'invert_f_b_hex':
+            # This is the inverted function B = g(F,C,D)
+            params.min_int = 0
+            params.max_int = 15
+            dims = [8] # 8 hex digits for a 32-bit number
+            tensor_dim = 1
+
+            # Input is F, C, D concatenated, so 3 * 8 = 24 hex digits
+            self.input_encoder = encoders.NumberArray(params, 24, 'V', tensor_dim, 'symbolic')
+            # Output is B, so 8 hex digits
+            self.output_encoder = encoders.NumberArray(params, 8, 'V', tensor_dim, 'symbolic')
+
+            # Patch encoders to use hexadecimal characters
+            hex_chars = [c for c in '0123456789ABCDEF']
+            hex_map = {c: i for i, c in enumerate(hex_chars)}
+
+            self.input_encoder.subencoder.symbols = hex_chars
+            self.input_encoder.subencoder.symbol_to_value = hex_map
+            self.input_encoder.symbols = self.input_encoder.dimencoder.symbols + self.input_encoder.subencoder.symbols
+
+            self.output_encoder.subencoder.symbols = hex_chars
+            self.output_encoder.subencoder.symbol_to_value = hex_map
+            self.output_encoder.symbols = self.output_encoder.dimencoder.symbols + self.output_encoder.subencoder.symbols
+
+            self.generator = generators.Sequence(params, dims)
+        
+        elif self.operation == 'matrix_rank':
             dims = [params.dim1, params.dim2]
             max_dim = 100
             tensor_dim = 2
             self.output_encoder = encoders.SymbolicInts(1, max_dim)
-        else:
+            self.input_encoder = encoders.NumberArray(params, max_dim, 'V', tensor_dim)
+            self.generator = generators.Sequence(params, dims)
+
+        else: # Default case for existing arithmetic operations
             dims = []
             max_dim =  4 if self.operation in ["fraction_compare", "fraction_determinant", "fraction_add", "fraction_product"] else 2
             tensor_dim =  1
@@ -100,12 +179,14 @@ class ArithmeticEnvironment(object):
                 self.output_encoder = encoders.NumberArray(params, 2, 'V', tensor_dim )
             elif self.operation in ["fraction_round", "gcd", "fraction_determinant","modular_add","modular_mul","elliptic"]:
                 self.output_encoder = encoders.PositionalInts(params.base)
-            else:
+            else: # Default to binary classification
                 self.output_encoder = encoders.SymbolicInts(0, 1)
-        self.input_encoder = encoders.NumberArray(params, max_dim, 'V', tensor_dim)
-        assert not self.export_pred or isinstance(self.output_encoder, (encoders.SymbolicInts, encoders.PositionalInts))
+            self.input_encoder = encoders.NumberArray(params, max_dim, 'V', tensor_dim)
+            self.generator = generators.Sequence(params, dims)
 
-        self.generator = generators.Sequence(params, dims)
+        # =================================================================
+        # End of modifications
+        # =================================================================
 
         # vocabulary
         self.words = SPECIAL_WORDS + sorted(list(
@@ -159,6 +240,10 @@ class ArithmeticEnvironment(object):
         The code class splits the test data in to subgroups by code_class
         This is passed to the evaluator, so it needs to be an integer
         """
+        # For boolean_f, all examples are in class 0.
+        if self.operation == 'boolean_f':
+            return 0
+            
         if self.export_pred:
             v = self.output_encoder.decode(yi)
             assert v is not None
@@ -312,4 +397,3 @@ class ArithmeticEnvironment(object):
         parser.add_argument(
             "--max_class", type=int, default=101, help="Maximum class for reporting with error predictions"
         )
-

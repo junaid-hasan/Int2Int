@@ -19,23 +19,58 @@ class Encoder(ABC):
             return None
         return v
 
+# class SymbolicInts(Encoder):
+#     """
+#     one token per int from min to max (0 to 1 for binary, -10 to 10 for bounded ints, 0 to Q-1 for modular)
+#     optionally: add a prefix, e.g. E-100 E100 for exponents, N1 N5 for dimensions 
+#     """
+#     def __init__(self, min, max, prefix = ''):
+#         super().__init__()
+#         self.prefix = prefix
+#         self.symbols = [self.prefix + str(i) for i in range(min, max+1)]
+
+#     def encode(self, value):
+#         return [self.prefix+str(value)]
+
+#     def parse(self, lst):
+#         if len(lst) == 0 or (not lst[0] in self.symbols):
+#             return None, 0
+#         return  int(lst[0][len(self.prefix):]), 1
+
 class SymbolicInts(Encoder):
     """
     one token per int from min to max (0 to 1 for binary, -10 to 10 for bounded ints, 0 to Q-1 for modular)
     optionally: add a prefix, e.g. E-100 E100 for exponents, N1 N5 for dimensions 
     """
-    def __init__(self, min, max, prefix = ''):
+    def __init__(self, min_val, max_val, prefix = ''):
         super().__init__()
         self.prefix = prefix
-        self.symbols = [self.prefix + str(i) for i in range(min, max+1)]
+        self.min = min_val
+        self.symbols = [self.prefix + str(i) for i in range(min_val, max_val+1)]
+        # Create a mapping from the symbol (without prefix) to its integer value
+        self.symbol_to_value = {str(i): i for i in range(min_val, max_val+1)}
 
     def encode(self, value):
-        return [self.prefix+str(value)]
+        # The generator for hex now produces characters directly, which become the value.
+        return [self.prefix + str(value)]
 
     def parse(self, lst):
-        if len(lst) == 0 or (not lst[0] in self.symbols):
+        if len(lst) == 0:
             return None, 0
-        return  int(lst[0][len(self.prefix):]), 1
+        
+        symbol_with_prefix = lst[0]
+        if not symbol_with_prefix.startswith(self.prefix):
+            return None, 0
+            
+        symbol = symbol_with_prefix[len(self.prefix):]
+
+        # Use the map to get the value. This is robust to non-integer symbols.
+        value = self.symbol_to_value.get(symbol)
+        
+        if value is None:
+            return None, 0
+            
+        return value, 1
 
 
 class PositionalInts(Encoder):
@@ -102,12 +137,19 @@ class NumberArray(Encoder):
     def decode(self, lst):
         shap = [] 
         h = lst
+        # for _ in range(self.tensor_dim):
+        #     v, _ = self.dimencoder.parse(h)
+        #     if v is None:
+        #         return None
+        #     shap.append(v)
+        #     h = h[1:]
         for _ in range(self.tensor_dim):
-            v, _ = self.dimencoder.parse(h)
+            v, pos = self.dimencoder.parse(h)
             if v is None:
                 return None
             shap.append(v)
-            h = h[1:]
+            h = h[pos:]
+        
         m = np.zeros(tuple(shap), dtype=int)
         for val in np.nditer(m, op_flags=['readwrite']):
             v, pos = self.subencoder.parse(h)
@@ -116,4 +158,3 @@ class NumberArray(Encoder):
             h = h[pos:]
             val[...] = v      
         return m
-
