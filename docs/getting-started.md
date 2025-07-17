@@ -9,7 +9,7 @@
 ## Running models that generate their own data
 
 - On laptops and local devices a batch size of 256 -1024 is recommended. 
-Run `python train.py --operation "invert_f_b_binary" --dump_path ./data/ --exp_name boolean_f --exp_id 07_02_invert_f_b_binary --base 2 --batch_size 1024 --epoch_size 300000 --max_epoch 20`
+Run `python train.py --operation "invert_f_b_binary" --dump_path ./data/ --exp_name boolean_f --exp_id 07_02_invert_f_b_binary_warm_2e4 --base 2 --batch_size 256 --epoch_size 100000 --max_epoch 200 --optimizer 'adam_warmup,lr=0.0002'`
 
 - On the cloud Nvidia GPUs here is an example with batch size 16384
 Run `python train.py --operation invert_f_b_hex --dump_path './data/' --exp_name boolean_f --exp_id 07_02_invert_f_b_hex_warm_2e4 --base 2 --batch_size 16384 --epoch_size 500000 --max_epoch 200 --optimizer 'adam_warmup,lr=0.0002'`

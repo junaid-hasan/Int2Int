@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 import math
+import secrets
 from logging import getLogger
 
 logger = getLogger()
@@ -38,6 +39,11 @@ def to_base_chars(n, base, num_digits):
     while len(chars) < num_digits:
         chars.append('0')
     return chars[::-1]
+
+def int_to_bin_array(n, bits):
+    # Format as a binary string, pad with leading zeros to the required bit length
+    binary_string = f'{n:0{bits}b}'
+    return np.array(list(binary_string), dtype=np.int64)
 
 def binary_array_to_int(arr):
     """Converts a numpy array of bits into an integer."""
@@ -137,12 +143,65 @@ class Sequence(Generator):
 
         elif self.operation == "invert_f_b_binary":
             # 1. The fundamental bit-length of our numbers.
-            bit_length = self.dims[0]
+            # bit_length = self.dims[0]
 
             # 2. Generate B, C, D as 32-bit binary arrays.
-            B_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
-            C_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
-            D_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # B_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # C_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # D_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            B_bin = rng.randint(0, 2, size=32, dtype=np.int64)
+            C_bin = rng.randint(0, 2, size=32, dtype=np.int64)
+            D_bin = rng.randint(0, 2, size=32, dtype=np.int64)
+
+            # 3. Calculate F using the forward function.
+            F_bin = np.where(B_bin == 1, C_bin, D_bin)
+
+            # 4. The INPUT is F, C, and D concatenated. Total length: 96 bits.
+            inp = np.concatenate((F_bin, C_bin, D_bin))
+            # 5. The OUTPUT is the value we want to predict: B.
+            out = B_bin
+
+            return inp, out
+
+        elif self.operation == "invert_f_b_binary_nano":
+            # 1. The fundamental bit-length of our numbers.
+            # bit_length = self.dims[0]
+
+            # 2. Generate B, C, D as 8-bit binary arrays.
+            # B_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # C_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # D_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            B_bin = rng.randint(0, 2, size=4, dtype=np.int64)
+            C_bin = rng.randint(0, 2, size=4, dtype=np.int64)
+            D_bin = rng.randint(0, 2, size=4, dtype=np.int64)
+
+            # 3. Calculate F using the forward function.
+            F_bin = np.where(B_bin == 1, C_bin, D_bin)
+
+            # 4. The INPUT is F, C, and D concatenated. Total length: 96 bits.
+            inp = np.concatenate((F_bin, C_bin, D_bin))
+            # 5. The OUTPUT is the value we want to predict: B.
+            out = B_bin
+
+            return inp, out
+        
+        elif self.operation == "invert_f_b_binary_nano_strong":
+            # 1. The fundamental bit-length of our numbers.
+            bit_length = self.dims[0]
+
+            # 2. Generate B, C, D as 8-bit binary arrays.
+            # B_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # C_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # D_bin = rng.randint(0, 2, size=bit_length, dtype=np.int64)
+            # Generate B, C, D as secure 4-bit integers
+            B_int = secrets.randbits(bit_length)
+            C_int = secrets.randbits(bit_length)
+            D_int = secrets.randbits(bit_length)
+
+            # Convert them to numpy arrays of bits
+            B_bin = int_to_bin_array(B_int, bit_length)
+            C_bin = int_to_bin_array(C_int, bit_length)
+            D_bin = int_to_bin_array(D_int, bit_length)
 
             # 3. Calculate F using the forward function.
             F_bin = np.where(B_bin == 1, C_bin, D_bin)

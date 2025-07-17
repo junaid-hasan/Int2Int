@@ -136,6 +136,36 @@ class ArithmeticEnvironment(object):
             self.output_encoder = encoders.NumberArray(params, 32, 'V', tensor_dim, 'symbolic')
 
             self.generator = generators.Sequence(params, dims)
+        
+        elif self.operation == 'invert_f_b_binary_nano':
+            # This is the inverted function B = g(F,C,D) using binary representations.
+            params.min_int = 0
+            params.max_int = 1
+            # dims = [32] # 32 binary digits
+            dims = [4]
+            tensor_dim = 1
+
+            # Input is F, C, D concatenated, so 3 * 4 = 12 bits.
+            self.input_encoder = encoders.NumberArray(params, 12, 'V', tensor_dim, 'symbolic')
+            # Output is B, so 8 bits.
+            self.output_encoder = encoders.NumberArray(params, 4, 'V', tensor_dim, 'symbolic')
+
+            self.generator = generators.Sequence(params, dims)
+        
+        elif self.operation == 'invert_f_b_binary_nano_strong':
+            # This is the inverted function B = g(F,C,D) using binary representations.
+            params.min_int = 0
+            params.max_int = 1
+            # dims = [32] # 32 binary digits
+            dims = [4]
+            tensor_dim = 1
+
+            # Input is F, C, D concatenated, so 3 * 8 = 24 bits.
+            self.input_encoder = encoders.NumberArray(params, 12, 'V', tensor_dim, 'symbolic')
+            # Output is B, so 8 bits.
+            self.output_encoder = encoders.NumberArray(params, 4, 'V', tensor_dim, 'symbolic')
+
+            self.generator = generators.Sequence(params, dims)
 
         elif self.operation == 'invert_f_b_hex':
             # This is the inverted function B = g(F,C,D)
