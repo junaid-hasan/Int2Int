@@ -152,29 +152,23 @@ class MultiHeadAttention(nn.Module):
                 else:
                     k, v = self.cache[self.layer_id]
             self.cache[self.layer_id] = (k, v)
-        if self.normalized_attention:
-            q = F.normalize(q, p=2, dim=-1)
-            k = F.normalize(k, p=2, dim=-1)
-            q = q * self.attention_scale
-        else:
-            q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
-        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, qlen, klen)
-        mask = (
-            (mask == 0).view(mask_reshape).expand_as(scores)
-        )  # (bs, n_heads, qlen, klen)
-        scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, qlen, klen)
-
-        weights = F.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (bs, n_heads, qlen, klen)
-        weights = F.dropout(
-            weights, p=self.dropout, training=self.training
-        )  # (bs, n_heads, qlen, klen)
-        context = torch.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
-        context = unshape(context)  # (bs, qlen, dim)
 
         if TransformerModel.STORE_OUTPUTS and not self.training:
-            self.outputs = weights.detach().cpu()
+            # Fallback to manual calculation to get attention weights
+            q = q / math.sqrt(dim_per_head)
+            scores = torch.matmul(q, k.transpose(2, 3))
+            attention_mask = (mask == 0).view(mask_reshape).expand_as(scores)
+            scores.masked_fill_(attention_mask, -float("inf"))
+
+            weights = torch.nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+            self.outputs = weights.detach().cpu() # Store the weights
+            weights = torch.nn.functional.dropout(weights, p=self.dropout, training=self.training)
+            context = torch.matmul(weights, v)
+        else: # use flash attention
+            attn_mask_for_sdpa = (mask == 0).view(mask_reshape)
+            context = torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, attn_mask=attn_mask_for_sdpa, dropout_p=self.dropout if self.training else 0.0, is_causal=False)
+        context = unshape(context)  # (bs, qlen, dim)
 
         return self.out_lin(context)
 
