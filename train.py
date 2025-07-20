@@ -167,6 +167,8 @@ def get_parser():
 # CPU / multi-gpu / multi-node
     parser.add_argument("--cpu", type=bool_flag, default=False,
                         help="Run on CPU")
+    parser.add_argument("--mps", type=bool_flag, default=False,
+                        help="Run on Apple MPS (Metal Performance Shaders) backend")
     parser.add_argument("--local_gpu", type=int, default=-1,
                         help="Multi-GPU - Local GPU")
     parser.add_argument("--local_rank", type=int, default=-1,
@@ -269,17 +271,24 @@ def main(params):
     if params.is_slurm_job:
         init_signal_handler()
 
-    # CPU / CUDA
+    # CPU / MPS/ CUDA
     if params.cpu:
         assert not params.multi_gpu
+        device = torch.device("cpu")
+    elif params.mps:
+        if not torch.backends.mps.is_available():
+            raise RuntimeError("MPS backend is not available. Please run with --cpu or install Apple Silicon enabled PyTorch.")
+        device = torch.device("mps")
     else:
-        assert torch.cuda.is_available()
-    src.utils.CUDA = not params.cpu
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is not available. Please run with --cpu or --mps, or install a CUDA-enabled PyTorch version.")
+        device = torch.device("cuda")
+        src.utils.CUDA = not params.cpu
 
     # build environment / modules / trainer / evaluator
     env = build_env(params)
     modules = build_modules(env, params)
-    trainer = Trainer(modules, env, params)
+    trainer = Trainer(modules, env, params, device)
     evaluator = Evaluator(trainer)
 
     # evaluation
@@ -307,15 +316,22 @@ def main(params):
                 else:
                     trainer.enc_dec_step(task)
                 trainer.iter()
-
-        logger.info(f"Memory allocated:  {torch.cuda.memory_allocated(0)/(1024*1024):.2f}MB, reserved: {torch.cuda.memory_reserved(0)/(1024*1024):.2f}MB")
+        
+        if device.type == 'cuda':
+            logger.info(f"Memory allocated:  {torch.cuda.memory_allocated(0)/(1024*1024):.2f}MB, reserved: {torch.cuda.memory_reserved(0)/(1024*1024):.2f}MB")
+        
+        elif device.type == 'mps':
+            logger.info(f"Memory allocated:  {torch.mps.current_allocated_memory()/(1024*1024):.2f}MB, reserved: {torch.mps.driver_allocated_memory()/(1024*1024):.2f}MB")
 
 
         logger.info("============ End of epoch %i ============" % trainer.epoch)
 
         # evaluate perplexity
         scores = evaluator.run_all_evals()
-        logger.info(f"Memory allocated:  {torch.cuda.memory_allocated(0)/(1024*1024):.2f}MB, reserved: {torch.cuda.memory_reserved(0)/(1024*1024):.2f}MB")
+        if device.type == 'cuda':
+            logger.info(f"Memory allocated:  {torch.cuda.memory_allocated(0)/(1024*1024):.2f}MB, reserved: {torch.cuda.memory_reserved(0)/(1024*1024):.2f}MB")
+        elif device.type == 'mps':
+            logger.info(f"Memory allocated:  {torch.mps.current_allocated_memory()/(1024*1024):.2f}MB, reserved: {torch.mps.driver_allocated_memory()/(1024*1024):.2f}MB")
 
         # print / JSON log
         # for k, v in scores.items():

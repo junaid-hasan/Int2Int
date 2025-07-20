@@ -10,7 +10,7 @@ from collections import OrderedDict
 import os
 import torch
 
-from .utils import to_cuda
+from .utils import to_device
 
 
 logger = getLogger()
@@ -82,6 +82,7 @@ class Evaluator(object):
         self.modules = trainer.modules
         self.params = trainer.params
         self.env = trainer.env
+        self.device = trainer.device
         Evaluator.ENV = trainer.env
 
     def run_all_evals(self):
@@ -193,8 +194,8 @@ class Evaluator(object):
 
         for (x1, len1), (x2, len2), nb_ops in iterator:
 
-            # cuda
-            x1_, len1_, x2_, len2_ = to_cuda(x1, len1, x2, len2)
+            # device
+            x1_, len1_, x2_, len2_ = to_device(self.device, x1, len1, x2, len2)
             # target words to predict
             if params.architecture != "encoder_only":
                 alen = torch.arange(len2_.max(), dtype=torch.long, device=len2_.device)
@@ -544,8 +545,8 @@ class Evaluator(object):
             y = x2[1:].masked_select(pred_mask[:-1])
             assert len(y) == (len2 - 1).sum().item()
 
-            # cuda
-            x1_, len1_, x2, len2, y = to_cuda(x1, len1, x2, len2, y)
+            # device
+            x1_, len1_, x2, len2, y = to_device(self.device, x1, len1, x2, len2, y)
             bs = len(len1)
 
             # forward

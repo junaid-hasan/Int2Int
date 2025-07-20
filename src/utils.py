@@ -123,13 +123,18 @@ def get_dump_path(params):
         subprocess.Popen("mkdir -p %s" % params.dump_path, shell=True).wait()
 
 
-def to_cuda(*args):
+# def to_cuda(*args):
+#     """
+#     Move tensors to CUDA.
+#     """
+#     if not CUDA:
+#         return args
+#     return [None if x is None else x.cuda() for x in args]
+def to_device(device, *args):
     """
-    Move tensors to CUDA.
+    Move tensors to the specified device (cuda, mps, or cpu).
     """
-    if not CUDA:
-        return args
-    return [None if x is None else x.cuda() for x in args]
+    return [None if x is None else x.to(device) for x in args]
 
 
 class TimeoutError(BaseException):

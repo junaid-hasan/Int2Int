@@ -17,13 +17,13 @@ from torch import nn
 from torch.nn.utils import clip_grad_norm_
 
 from .optim import get_optimizer
-from .utils import to_cuda
+from .utils import to_device
 
 logger = getLogger()
 
 
 class Trainer(object):
-    def __init__(self, modules, env, params):
+    def __init__(self, modules, env, params, device):
         """
         Initialize trainer.
         """
@@ -31,6 +31,7 @@ class Trainer(object):
         self.modules = modules
         self.params = params
         self.env = env
+        self.device = device
 
         assert self.params.report_loss_every > 0
 
@@ -175,7 +176,14 @@ class Trainer(object):
             and params.fp16 is True
         )
         # mod_names = sorted(self.modules.keys()) # unused
-        self.scaler = torch.cuda.amp.GradScaler()
+        if self.device.type == 'cuda':
+            self.scaler = torch.cuda.amp.GradScaler()
+        else:
+            logger.warning(
+                "AMP is only supported on CUDA devices. "
+                "Using AMP with CPU will not work properly."
+            )
+            self.scaler = None
 
     def optimize(self, loss):
         """
@@ -199,7 +207,7 @@ class Trainer(object):
                 clip_grad_norm_(self.parameters["model"], params.clip_grad_norm)
             optimizer.step()
 
-        else:
+        elif self.scaler:
             if params.accumulate_gradients > 1:
                 loss = loss / params.accumulate_gradients
             self.scaler.scale(loss).backward()
@@ -210,6 +218,16 @@ class Trainer(object):
                     clip_grad_norm_(self.parameters["model"], params.clip_grad_norm)
                 self.scaler.step(optimizer)
                 self.scaler.update()
+                optimizer.zero_grad()
+        else:
+            if params.accumulate_gradients > 1:
+                loss = loss / params.accumulate_gradients
+            loss.backward()
+
+            if (self.n_iter + 1) % params.accumulate_gradients == 0:
+                if params.clip_grad_norm > 0:
+                    clip_grad_norm_(self.parameters["model"], params.clip_grad_norm)
+                optimizer.step()
                 optimizer.zero_grad()
 
     def iter(self):
@@ -447,13 +465,13 @@ class Trainer(object):
         if params.architecture == "decoder_only":
             # batch
             (x2, len2), _ = self.get_batch(task)
-            # cuda
-            x2, len2 = to_cuda(x2, len2)
+            # device
+            x2, len2 = to_device(self.device, x2, len2)
         else:
             # batch
             (x1, len1), (x2, len2), _ = self.get_batch(task)
-            # cuda
-            x1, len1, x2, len2 = to_cuda(x1, len1, x2, len2)
+            # device
+            x1, len1, x2, len2 = to_device(self.device, x1, len1, x2, len2)
 
         # target words to predict
         if params.architecture != "encoder_only":
@@ -503,7 +521,7 @@ class Trainer(object):
                         "predict", tensor=decoded, pred_mask=pred_mask, y=y, get_scores=False
                     )
                 else:
-                    with torch.cuda.amp.autocast():
+                    with torch.autocast(device_type=self.device.type):
                         _, hidden = encoder("fwd", x=x1, lengths=len1, causal=False)
                         decoded, _ = decoder(
                             "fwd",
@@ -534,7 +552,7 @@ class Trainer(object):
                         "predict", tensor=decoded, pred_mask=pred_mask, y=y, get_scores=False
                     )
                 else:
-                    with torch.cuda.amp.autocast():
+                    with torch.autocast(device_type=self.device.type):
                         encoded = encoder("fwd", x=x1, lengths=len1, causal=False)
                         decoded = decoder(
                             "fwd",
@@ -562,7 +580,7 @@ class Trainer(object):
                     "predict", tensor=encoded, pred_mask=pred_mask, y=y, get_scores=False
                 )
             else:
-                with torch.cuda.amp.autocast():
+                with torch.autocast(device_type=self.device.type):
                     encoded = encoder("fwd", x=x1, lengths=len1, causal=False)
                     _, loss = encoder(
                         "predict",
@@ -587,7 +605,7 @@ class Trainer(object):
                     "predict", tensor=decoded, pred_mask=pred_mask, y=y, get_scores=False
                 )
             else:
-                with torch.cuda.amp.autocast():
+                with torch.autocast(device_type=self.device.type):
                     decoded = decoder(
                         "fwd",
                         x=x2,

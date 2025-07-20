@@ -151,7 +151,10 @@ def init_distributed_mode(params):
     print(PREFIX + "Hostname       : %s" % socket.gethostname())
 
     # set GPU device
-    if not params.cpu:
+    if not params.cpu and not getattr(params, 'mps', False): # Check for MPS flag
+        # This block should only run for CUDA devices
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is not available. Use --cpu or --mps.")
         if params.local_gpu != -1:
             torch.cuda.set_device(params.local_gpu)
         else:

@@ -85,7 +85,8 @@ def build_modules(env, params):
 
     # cuda
     if not params.cpu:
+        device = torch.device("mps" if params.mps else "cuda")
         for v in modules.values():
-            v.cuda()
+            v.to(device)
 
     return modules
