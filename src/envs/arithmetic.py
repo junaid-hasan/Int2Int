@@ -234,7 +234,10 @@ class ArithmeticEnvironment(object):
         elif data_type == "valid":
             path_iter = data_path[0]
         elif data_type == "test":
-            path_iter = data_path[1]
+            if len(data_path) > 1:
+                path_iter = data_path[1]
+            else:
+                path_iter = data_path[0]
         else: 
             path_iter = data_path[int(data_type[4:])]
         dataset = EnvDataset(

@@ -383,7 +383,7 @@ class Evaluator(object):
                 if not valid[i]:
                     if is_valid ==2:
                         n_perfect += 1
-                    if is_valid >= 0:
+                    if is_valid > 0:  # before it was is_valid >=0 
                         n_correct += 1
                     if is_valid > 0:
                         n_valid[nb_ops[i]] += 1

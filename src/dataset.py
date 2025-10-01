@@ -85,6 +85,9 @@ class EnvDataset(Dataset):
             self.size = 1 << 60
         elif size is None:
             self.size = 10000 if path is None else len(self.data)
+        elif size == -1:
+            assert path is not None
+            self.size = len(self.data)
         else:
             assert size > 0
             self.size = size

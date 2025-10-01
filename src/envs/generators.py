@@ -105,6 +105,15 @@ class Sequence(Generator):
         return None
 
     def evaluate(self, src, tgt, hyp):
-                        
-        return 0, [],[]
+        if self.operation == "gcd":
+            if src is None or len(src) != 2 or hyp is None:
+                return -1, [], [] # invalid format
+            true_gcd = math.gcd(int(src[0]), int(src[1]))
+
+            if int(hyp) == true_gcd:
+                return 2, [], []
+            else:
+                return 0, [], []
+        else:
+            return 0, [],[]
 
